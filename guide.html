@@ -1985,14 +1985,25 @@ RAW.forEach(p => {
 });
 
 // State
-let activeCategory = 'All';
+let activeCategories = new Set();
 let searchQuery = '';
+
+function updateCatButtons() {
+  document.querySelectorAll('.cat-btn').forEach(btn => {
+    const cat = btn.dataset.cat;
+    if (cat === 'All') {
+      btn.classList.toggle('active', activeCategories.size === 0);
+    } else {
+      btn.classList.toggle('active', activeCategories.has(cat));
+    }
+  });
+}
 
 function filterAndRender() {
   markerLayer.clearLayers();
   const query = searchQuery.toLowerCase();
   const filtered = allMarkers.filter(({ place: p }) => {
-    const catMatch = activeCategory === 'All' || p.Category === activeCategory;
+    const catMatch = activeCategories.size === 0 || activeCategories.has(p.Category);
     const searchMatch = !query ||
       p.Name.toLowerCase().includes(query) ||
       (p.Description || '').toLowerCase().includes(query) ||
@@ -2007,9 +2018,17 @@ function filterAndRender() {
 // Category buttons
 document.querySelectorAll('.cat-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    activeCategory = btn.dataset.cat;
+    const cat = btn.dataset.cat;
+    if (cat === 'All') {
+      activeCategories.clear();
+    } else {
+      if (activeCategories.has(cat)) {
+        activeCategories.delete(cat);
+      } else {
+        activeCategories.add(cat);
+      }
+    }
+    updateCatButtons();
     filterAndRender();
   });
 });
@@ -2065,6 +2084,7 @@ function renderList(places) {
   });
 }
 
+updateCatButtons();
 filterAndRender();
 </script>
 </body>
