@@ -760,6 +760,15 @@ const WORKER_URL = 'https://raindrop-proxy.plochinger-services.workers.dev';
 let RAW = [];
 let allMarkers = [];
 
+const categoryColors = {
+  'Restaurant': '#e06878',
+  'Bar': '#c09ae0',
+  'Coffee': '#e8c85a',
+  'Things To Do': '#68bcd8',
+  'Shopping': '#5ac080',
+  'Day Trip': '#e09858'
+};
+
 async function loadPlaces() {
   try {
     const res = await fetch(WORKER_URL + '?t=' + Date.now());
@@ -878,15 +887,6 @@ function startGPS() {
 startGPS();
 
 // Markers
-const categoryColors = {
-  'Restaurant': '#e06878',
-  'Bar': '#c09ae0',
-  'Coffee': '#e8c85a',
-  'Things To Do': '#68bcd8',
-  'Shopping': '#5ac080',
-  'Day Trip': '#e09858'
-};
-
 function makeIcon(cat) {
   const color = categoryColors[cat] || '#555';
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="32" viewBox="0 0 24 32">
