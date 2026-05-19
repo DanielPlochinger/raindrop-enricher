@@ -747,16 +747,14 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
 <script>
 // Config
-const GITHUB_TOKEN = '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';
-const GITHUB_API = 'https://api.github.com/repos/DanielPlochinger/raindrop-enricher/contents/places.json';
-const PLACES_URL = 'https://raw.githubusercontent.com/DanielPlochinger/raindrop-enricher/main/places.json';
+const WORKER_URL = 'https://raindrop-proxy.plochinger-services.workers.dev';
 
-// Load places dynamically from places.json
+// Load places dynamically from Worker
 let RAW = [];
 
 async function loadPlaces() {
   try {
-    const res = await fetch(PLACES_URL + '?t=' + Date.now());
+    const res = await fetch(WORKER_URL + '?t=' + Date.now());
     RAW = await res.json();
   } catch(e) {
     document.getElementById('loading').textContent = 'Failed to load places. Check connection.';
@@ -766,7 +764,7 @@ async function loadPlaces() {
   initMap();
 }
 
-// Mark a place as visited and write back to GitHub
+// Mark a place as visited and write back via Worker
 async function toggleVisited(id) {
   const place = RAW.find(p => p.ID === id);
   if (!place) return;
@@ -779,27 +777,12 @@ async function toggleVisited(id) {
     updateMarkerOpacity(entry);
   }
 
-  // Write updated places.json to GitHub
+  // Write updated places via Worker
   try {
-    // Get current SHA
-    const meta = await fetch(GITHUB_API, {
-      headers: { Authorization: 'token ' + GITHUB_TOKEN }
-    });
-    const { sha } = await meta.json();
-
-    // Encode updated JSON
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(RAW, null, 2))));
-    await fetch(GITHUB_API, {
+    await fetch(WORKER_URL, {
       method: 'PUT',
-      headers: {
-        Authorization: 'token ' + GITHUB_TOKEN,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        message: place.Visited ? `Mark visited: ${place.Name}` : `Unmark visited: ${place.Name}`,
-        content,
-        sha
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ places: RAW })
     });
   } catch(e) {
     console.error('Failed to save visited status:', e);
