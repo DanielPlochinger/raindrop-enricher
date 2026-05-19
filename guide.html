@@ -700,9 +700,14 @@ svg.leaflet-image-layer.leaflet-interactive path {
   #list-view { flex: 1; overflow-y: auto; display: none; }
   .list-item { background: #fff; border-bottom: 1px solid #ececec; padding: 12px 14px; cursor: pointer; }
   .list-item:active { background: #f0f0f0; }
+  .li-header { display: flex; align-items: center; gap: 8px; }
   .li-name { font-size: 15px; font-weight: 600; color: #111; }
+  .li-visited-badge { font-size: 11px; color: #aaa; background: #f0f0f0; border-radius: 8px; padding: 1px 7px; white-space: nowrap; }
   .li-meta { font-size: 12px; color: #888; margin-top: 2px; }
   .li-desc { font-size: 13px; color: #444; margin-top: 4px; line-height: 1.4; }
+  .li-footer { margin-top: 6px; }
+  .li-maps { font-size: 12px; color: #4a9cc4; text-decoration: none; font-weight: 500; }
+  .li-maps:hover { text-decoration: underline; }
 
   /* Popup */
   .leaflet-popup-content-wrapper { border-radius: 10px; padding: 0; }
@@ -751,6 +756,7 @@ const WORKER_URL = 'https://raindrop-proxy.plochinger-services.workers.dev';
 
 // Load places dynamically from Worker
 let RAW = [];
+let allMarkers = [];
 
 async function loadPlaces() {
   try {
@@ -794,6 +800,25 @@ function updateMarkerOpacity(entry) {
   if (el) el.style.opacity = entry.place.Visited ? '0.35' : '1';
 }
 
+function buildPopup(p) {
+  const meta = [p.Category, p['Sub-category']].filter(Boolean).join(' · ');
+  const desc = p.Description ? `<div class="popup-desc">${p.Description}</div>` : '';
+  const addr = p.Address ? `<div class="popup-addr">${p.Address}</div>` : '';
+  const mapsLink = p['Google Maps Link']
+    ? `<a class="popup-maps" href="${p['Google Maps Link']}" target="_blank">Open in Maps</a>`
+    : `<span></span>`;
+  const visitedClass = p.Visited ? 'popup-visited done' : 'popup-visited';
+  const visitedLabel = p.Visited ? '✓ Visited' : 'Mark visited';
+  const footer = `<div class="popup-footer">
+    ${mapsLink}
+    <button class="${visitedClass}" onclick="toggleVisited(${p.ID})">${visitedLabel}</button>
+  </div>`;
+  return `<div class="popup-inner">
+    <div class="popup-name">${p.Name}</div>
+    <div class="popup-meta">${meta}</div>
+    ${desc}${addr}${footer}
+  </div>`;
+}
 
 function initMap() {
 // Map init
@@ -845,28 +870,8 @@ function makeIcon(cat) {
   });
 }
 
-let allMarkers = [];
+allMarkers = [];
 let markerLayer = L.layerGroup().addTo(map);
-
-function buildPopup(p) {
-  const meta = [p.Category, p['Sub-category']].filter(Boolean).join(' · ');
-  const desc = p.Description ? `<div class="popup-desc">${p.Description}</div>` : '';
-  const addr = p.Address ? `<div class="popup-addr">${p.Address}</div>` : '';
-  const mapsLink = p['Google Maps Link']
-    ? `<a class="popup-maps" href="${p['Google Maps Link']}" target="_blank">Open in Maps</a>`
-    : `<span></span>`;
-  const visitedClass = p.Visited ? 'popup-visited done' : 'popup-visited';
-  const visitedLabel = p.Visited ? '✓ Visited' : 'Mark visited';
-  const footer = `<div class="popup-footer">
-    ${mapsLink}
-    <button class="${visitedClass}" onclick="toggleVisited(${p.ID})">${visitedLabel}</button>
-  </div>`;
-  return `<div class="popup-inner">
-    <div class="popup-name">${p.Name}</div>
-    <div class="popup-meta">${meta}</div>
-    ${desc}${addr}${footer}
-  </div>`;
-}
 
 RAW.forEach(p => {
   if (!p.lat || !p.lon) return;
@@ -953,17 +958,21 @@ function renderList(places) {
   listEl.innerHTML = sorted.map(p => {
     const meta = [p.Category, p['Sub-category']].filter(Boolean).join(' · ');
     const desc = p.Description ? `<div class="li-desc">${p.Description}</div>` : '';
-    return `<div class="list-item" data-name="${p.Name}">
-      <div class="li-name">${p.Name}</div>
+    const visitedBadge = p.Visited ? `<span class="li-visited-badge">✓ Visited</span>` : '';
+    const mapsBtn = p['Google Maps Link']
+      ? `<div class="li-footer"><a class="li-maps" href="${p['Google Maps Link']}" target="_blank" onclick="event.stopPropagation()">Open in Maps</a></div>`
+      : '';
+    return `<div class="list-item" data-id="${p.ID}">
+      <div class="li-header"><div class="li-name">${p.Name}</div>${visitedBadge}</div>
       <div class="li-meta">${meta}</div>
-      ${desc}
+      ${desc}${mapsBtn}
     </div>`;
   }).join('');
 
   listEl.querySelectorAll('.list-item').forEach(el => {
     el.addEventListener('click', () => {
-      const name = el.dataset.name;
-      const found = allMarkers.find(m => m.place.Name === name);
+      const id = parseInt(el.dataset.id);
+      const found = allMarkers.find(m => m.place.ID === id);
       if (found) {
         showingList = false;
         mapEl.style.display = 'block';
