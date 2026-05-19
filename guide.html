@@ -712,6 +712,11 @@ svg.leaflet-image-layer.leaflet-interactive path {
   .popup-meta { font-size: 11px; color: #888; margin-bottom: 6px; }
   .popup-desc { font-size: 13px; color: #333; line-height: 1.45; }
   .popup-addr { font-size: 11px; color: #999; margin-top: 6px; }
+  .popup-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 8px; border-top: 1px solid #eee; }
+  .popup-maps { font-size: 12px; color: #4a9cc4; text-decoration: none; font-weight: 500; }
+  .popup-maps:hover { text-decoration: underline; }
+  .popup-visited { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #555; cursor: pointer; background: none; border: 1px solid #ddd; border-radius: 12px; padding: 3px 9px; }
+  .popup-visited.done { background: #f0f0f0; color: #999; border-color: #e0e0e0; }
 
   /* GPS dot */
   .gps-dot { width: 16px; height: 16px; border-radius: 50%; background: #2979ff; border: 3px solid #fff; box-shadow: 0 0 6px rgba(41,121,255,0.6); }
@@ -741,11 +746,15 @@ svg.leaflet-image-layer.leaflet-interactive path {
 <div id="list-view"></div>
 
 <script>
+// Config
+const GITHUB_TOKEN = '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';
+const GITHUB_API = 'https://api.github.com/repos/DanielPlochinger/raindrop-enricher/contents/places.json';
+const PLACES_URL = 'https://raw.githubusercontent.com/DanielPlochinger/raindrop-enricher/main/places.json';
+
 // Load places dynamically from places.json
 let RAW = [];
 
 async function loadPlaces() {
-  const PLACES_URL = 'https://raw.githubusercontent.com/DanielPlochinger/raindrop-enricher/main/places.json';
   try {
     const res = await fetch(PLACES_URL + '?t=' + Date.now());
     RAW = await res.json();
@@ -755,6 +764,51 @@ async function loadPlaces() {
   }
   document.getElementById('loading').style.display = 'none';
   initMap();
+}
+
+// Mark a place as visited and write back to GitHub
+async function toggleVisited(id) {
+  const place = RAW.find(p => p.ID === id);
+  if (!place) return;
+  place.Visited = !place.Visited;
+
+  // Refresh popup
+  const entry = allMarkers.find(m => m.place.ID === id);
+  if (entry) {
+    entry.marker.setPopupContent(buildPopup(place));
+    updateMarkerOpacity(entry);
+  }
+
+  // Write updated places.json to GitHub
+  try {
+    // Get current SHA
+    const meta = await fetch(GITHUB_API, {
+      headers: { Authorization: 'token ' + GITHUB_TOKEN }
+    });
+    const { sha } = await meta.json();
+
+    // Encode updated JSON
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(RAW, null, 2))));
+    await fetch(GITHUB_API, {
+      method: 'PUT',
+      headers: {
+        Authorization: 'token ' + GITHUB_TOKEN,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: place.Visited ? `Mark visited: ${place.Name}` : `Unmark visited: ${place.Name}`,
+        content,
+        sha
+      })
+    });
+  } catch(e) {
+    console.error('Failed to save visited status:', e);
+  }
+}
+
+function updateMarkerOpacity(entry) {
+  const el = entry.marker.getElement();
+  if (el) el.style.opacity = entry.place.Visited ? '0.35' : '1';
 }
 
 
@@ -815,10 +869,19 @@ function buildPopup(p) {
   const meta = [p.Category, p['Sub-category']].filter(Boolean).join(' · ');
   const desc = p.Description ? `<div class="popup-desc">${p.Description}</div>` : '';
   const addr = p.Address ? `<div class="popup-addr">${p.Address}</div>` : '';
+  const mapsLink = p['Google Maps Link']
+    ? `<a class="popup-maps" href="${p['Google Maps Link']}" target="_blank">Open in Maps</a>`
+    : `<span></span>`;
+  const visitedClass = p.Visited ? 'popup-visited done' : 'popup-visited';
+  const visitedLabel = p.Visited ? '✓ Visited' : 'Mark visited';
+  const footer = `<div class="popup-footer">
+    ${mapsLink}
+    <button class="${visitedClass}" onclick="toggleVisited(${p.ID})">${visitedLabel}</button>
+  </div>`;
   return `<div class="popup-inner">
     <div class="popup-name">${p.Name}</div>
     <div class="popup-meta">${meta}</div>
-    ${desc}${addr}
+    ${desc}${addr}${footer}
   </div>`;
 }
 
@@ -826,8 +889,11 @@ RAW.forEach(p => {
   if (!p.lat || !p.lon) return;
   const marker = L.marker([p.lat, p.lon], { icon: makeIcon(p.Category) })
     .bindPopup(buildPopup(p), { maxWidth: 260 });
-  allMarkers.push({ place: p, marker });
+  const entry = { place: p, marker };
+  allMarkers.push(entry);
   markerLayer.addLayer(marker);
+  // Apply visited opacity after marker is added to map
+  marker.on('add', () => updateMarkerOpacity(entry));
 });
 
 // State
