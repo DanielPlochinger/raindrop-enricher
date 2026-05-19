@@ -702,7 +702,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
   .list-item:active { background: #f0f0f0; }
   .li-header { display: flex; align-items: center; gap: 8px; }
   .li-name { font-size: 15px; font-weight: 600; color: #111; }
-  .li-visited-badge { font-size: 11px; color: #aaa; background: #f0f0f0; border-radius: 8px; padding: 1px 7px; white-space: nowrap; }
+  .li-visited-badge { font-size: 11px; color: #fff; background: #4a9cc4; border-radius: 8px; padding: 1px 7px; white-space: nowrap; flex-shrink: 0; }
   .li-meta { font-size: 12px; color: #888; margin-top: 2px; }
   .li-desc { font-size: 13px; color: #444; margin-top: 4px; line-height: 1.4; }
   .li-footer { margin-top: 6px; }
@@ -720,8 +720,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
   .popup-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 8px; border-top: 1px solid #eee; }
   .popup-maps { font-size: 12px; color: #4a9cc4; text-decoration: none; font-weight: 500; }
   .popup-maps:hover { text-decoration: underline; }
-  .popup-visited { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #555; cursor: pointer; background: none; border: 1px solid #ddd; border-radius: 12px; padding: 3px 9px; }
-  .popup-visited.done { background: #f0f0f0; color: #999; border-color: #e0e0e0; }
+  .popup-visited { font-size: 12px; color: #555; cursor: pointer; background: none; border: 1px solid #ccc; border-radius: 12px; padding: 4px 11px; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+  .popup-visited:hover { border-color: #4a9cc4; color: #4a9cc4; }
+  .popup-visited.done { background: #4a9cc4; color: #fff; border-color: #4a9cc4; }
+  .popup-visited.done:hover { background: #3a8ab4; border-color: #3a8ab4; }
 
   /* GPS dot */
   .gps-dot { width: 16px; height: 16px; border-radius: 50%; background: #2979ff; border: 3px solid #fff; box-shadow: 0 0 6px rgba(41,121,255,0.6); }
@@ -776,28 +778,54 @@ async function toggleVisited(id) {
   if (!place) return;
   place.Visited = !place.Visited;
 
-  // Refresh popup
+  // Update map marker and popup immediately
   const entry = allMarkers.find(m => m.place.ID === id);
   if (entry) {
     entry.marker.setPopupContent(buildPopup(place));
-    updateMarkerOpacity(entry);
+    updateMarkerStyle(entry);
   }
 
-  // Write updated places via Worker
+  // Update list badge in place (without re-rendering whole list)
+  const listItem = document.querySelector(`[data-id="${id}"]`);
+  if (listItem) {
+    const header = listItem.querySelector('.li-header');
+    const badge = listItem.querySelector('.li-visited-badge');
+    if (place.Visited && !badge) {
+      header.insertAdjacentHTML('beforeend', `<span class="li-visited-badge">✓ Visited</span>`);
+    } else if (!place.Visited && badge) {
+      badge.remove();
+    }
+  }
+
+  // Write to Worker
   try {
-    await fetch(WORKER_URL, {
+    const res = await fetch(WORKER_URL, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ places: RAW })
     });
+    const result = await res.json();
+    if (!result.ok) throw new Error('Save failed');
   } catch(e) {
-    console.error('Failed to save visited status:', e);
+    // Revert everything on failure
+    place.Visited = !place.Visited;
+    if (entry) {
+      entry.marker.setPopupContent(buildPopup(place));
+      updateMarkerStyle(entry);
+    }
+    const badge2 = listItem?.querySelector('.li-visited-badge');
+    if (place.Visited && !badge2) listItem?.querySelector('.li-header')?.insertAdjacentHTML('beforeend', `<span class="li-visited-badge">✓ Visited</span>`);
+    else if (!place.Visited && badge2) badge2.remove();
+    alert('Could not save — check your connection and try again.');
   }
 }
 
-function updateMarkerOpacity(entry) {
+function updateMarkerStyle(entry) {
   const el = entry.marker.getElement();
-  if (el) el.style.opacity = entry.place.Visited ? '0.35' : '1';
+  if (!el) return;
+  el.style.opacity = '';
+  const path = el.querySelector('path');
+  if (path) path.setAttribute('fill', entry.place.Visited ? '#b0b0b0' : (categoryColors[entry.place.Category] || '#555'));
 }
 
 function buildPopup(p) {
@@ -881,7 +909,7 @@ RAW.forEach(p => {
   allMarkers.push(entry);
   markerLayer.addLayer(marker);
   // Apply visited opacity after marker is added to map
-  marker.on('add', () => updateMarkerOpacity(entry));
+  marker.on('add', () => updateMarkerStyle(entry));
 });
 
 // State
