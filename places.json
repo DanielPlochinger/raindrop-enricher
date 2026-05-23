@@ -957,7 +957,7 @@
     "Address Line 2": null,
     "Description": null,
     "Google Maps Link": null,
-    "Visited": null,
+    "Visited": true,
     "lat": 43.6470857,
     "lon": -79.4169554
   },
